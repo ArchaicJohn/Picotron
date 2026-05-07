@@ -1,0 +1,415 @@
+picotron cartridge // www.picotron.net
+version 2
+
+:: gfx/
+:: map/
+:: sfx/
+:: anim.lua
+--[[pod_format="raw",created="2026-05-06 23:17:06",modified="2026-05-07 01:34:39",revision=9]]
+--[[ animation functions ]]
+
+local default_global_timing = 10
+
+--[[
+	PLAYING ANIMATIONS:
+	playanim(obj, anim): your table, and your created animation (or the name of an animation stored in obj)
+
+	UPDATING SPRITES:
+	spr(updateanim(obj), ...)
+
+	CREATING ANIMATIONS:
+
+	all timing is in frames at 30fps
+	all sprite indexes are absolute sprite sheet indexes
+	usage:
+	newanim(spritetable, defaulttiming)
+		spritetable can have timing overrides as such: {4,{5,2},7}
+
+	newanim(spriteidx, count, timing)
+		for simple contiguous animations from spriteidx -> spriteidx + count-1, with timing
+
+]]
+
+local simple = function(state, a)
+	state.time = state.time + 1
+
+	if state.time >= a.timing then
+		state.time = 0
+		state.idx = state.idx + 1
+		if a.sprite + state.idx > a.maxidx + 1 then
+			state.idx = 1
+		end
+	end
+
+	return a.sprite + state.idx - 1
+end
+
+local custom = function(state, a)
+	state.time = state.time + 1
+
+	local max = #a.sprites -- or a.maxidx + 1
+	local cur = a.sprites[state.idx]
+	local timing = a.timing
+	if type(cur) == "table" then
+		timing = cur[2]
+		cur = cur[1]
+	end
+	local next = (state.idx + 1 <= max and a.sprites[state.idx+1]) or a.sprites[1]
+	if type(next) == "table" then
+		next = next[1]
+	end
+
+	if state.time >= timing then
+		state.time = 0
+		state.idx = state.idx + 1
+		cur = next
+		if state.idx > max then
+			state.idx = 1
+		end
+	end
+
+	return cur
+end
+
+function newanim(spritesoridx, cntortiming, defaulttiming)
+	if type(spritesoridx) == "table" then
+		return {play = custom, sprites = spritesoridx, timing = cntortiming or default_global_timing}
+	else
+		return {play = simple, sprite = spritesoridx, maxidx = spritesoridx + cntortiming - 1, timing = defaulttiming or default_global_timing}
+	end
+end
+
+function playanim(target, a)
+	local anim = type(a) == "string" and target[a] or a
+	-- start at end index so we correctly play first frame without hax
+	if not target.curanim or target.curanim.anim ~= anim then
+		target.curanim = {time = anim.timing, idx = anim.maxidx or #anim.sprites, anim = anim}
+	end
+end
+
+function updateanim(target)
+	local d, a = target.curanim, target.curanim.anim
+	if d ~= nil then
+		return a.play(d, a)
+	end
+end
+:: camera.lua
+--[[pod_format="raw",created="2026-05-07 01:34:44",modified="2026-05-07 01:34:44",revision=0]]
+function updatecamoffset(target)
+	camxoffset=target.x-64
+	camyoffset=target.y-64
+end
+:: entity.lua
+--[[pod_format="raw",created="2026-05-07 01:34:40",modified="2026-05-07 01:39:36",revision=1]]
+function makeentity(ex,ey,ew,eh,interactable,ecx,ecy,ecw,ech,ecollide)
+    local e={
+        x=ex,
+        y=ey,
+        w=ew,
+        h=eh,
+        x1=ex+ew,
+        y1=ey+eh,
+        dx=0,
+        dy=0,
+        spd=1,
+        flip=false,
+        dir=0,
+        caninteract=interactable,
+        --collider
+        cx=ex+ecx,
+        cy=ey+ecy,
+        cw=ecw,
+        ch=ech,
+        cx1=ex+ecx+ecw,
+        cy1=ey+ecy+ech,
+        collide = ecollide
+    }
+
+    function e:update()
+    end
+
+    function e:draw()
+        spr(updateanim(e),e.x,e.y,1,1,e.flip)
+    end
+
+    function e:drawcollider()
+		rect(e.cx,e.cy,e.cx1,e.cy1,11)
+	end
+
+    function e:interact()
+    end
+
+    function e:move()
+		if e.collide then
+			e.movewithcollision()
+		else
+			e.updateobjposition()
+			e.updatecolliderposition()
+		end
+	end
+
+	function e:movewithcollision()
+		--last good deltas
+		lgdx,lgdy=0,0
+
+		--these iterators are required for the for loops to move in the correct direction
+		local dxi = 1
+		if e.dx < 0 then dxi = -1 end
+
+		local dyi = 1
+		if e.dy < 0 then dyi = -1 end
+
+		for nx=0,e.dx,dxi do
+			for ny=0,e.dy,dyi do
+				local ocx=e.cx+nx
+				local ocy=e.cy+ny
+				local ocx1=e.cx1+nx
+				local ocy1=e.cy1+ny
+				local posgood = true
+                
+                -- entity collsion
+				for ent in all(entities) do
+					-- exclude self
+					if (ent ~= e) then
+						if (overlap(ocx,ocy,ocx1,ocy1,ent.cx,ent.cy,ent.cx1,ent.cy1)) then
+							posgood = false;
+							break
+						end
+					end
+				end
+                
+                -- tile collision
+                if  fmget(ocx,ocy)==tilesolid or 
+                    fmget(ocx1,ocy)==tilesolid or
+                    fmget(ocx,ocy1)==tilesolid or
+                    fmget(ocx1,ocy1)==tilesolid then
+                    posgood=false
+                end
+
+				if posgood then
+					lgdx,lgdy=nx,ny
+				end
+			end
+		end
+
+		-- set new, good delta for movement
+		e.dx,e.dy=lgdx,lgdy
+		e.updateobjposition()
+		e.updatecolliderposition()
+	end
+
+    function e:updateobjposition()
+        e.x+=e.dx
+        e.y+=e.dy
+        e.x1=e.x+e.w
+        e.y1=e.y+e.h
+    end
+
+    function e:updatecolliderposition()
+        e.cx+=e.dx
+        e.cy+=e.dy
+        e.cx1=e.cx+e.cw
+        e.cy1=e.cy+e.ch
+    end
+
+    add(entities,e)
+
+    return e
+end
+
+function makeplayer(x,y)
+	local p=makeentity(x,y,7,7,false,1,5,5,2,true)
+
+	p.walklr=newanim({3,4})
+	p.walkup=newanim({6,5})
+	p.walkdown=newanim({1,2})
+
+	return p
+end
+:: globals.lua
+--[[pod_format="raw",created="2026-05-07 01:34:42",modified="2026-05-07 01:34:42",revision=0]]
+-- tile flags
+tilesolid=1
+
+--camera
+camxoffset=0
+camyoffset=0
+:: input.lua
+--[[pod_format="raw",created="2026-05-07 01:34:43",modified="2026-05-07 01:34:43",revision=0]]
+function doinput()
+	butn=getinput()
+	
+	if butn==4 then
+		--player.interact()
+	end
+	
+end
+
+function getinput()
+	for i=0,5 do
+		if btn(i) then
+			return i
+		end
+	end
+	return -1
+end
+:: main.lua
+--[[pod_format="raw",created="2026-05-05 00:06:08",modified="2026-05-07 02:02:25",revision=74]]
+include "anim.lua"
+include "camera.lua"
+include "entity.lua"
+include "globals.lua"
+include "input.lua"
+include "utils.lua"
+
+entities={}
+
+function init()
+	-- none of these add to the entities table... why?
+	player=makeplayer(240,120)
+	add(entities,player)
+	add(entities,1)
+	playanim(player,"walklr")
+end
+
+function _update()
+	doinput()
+	for e in all(entities) do
+		e.update()
+	end
+	
+	if btnp(5) then
+		local e=makeentity(32,32,7,7,false,1,5,5,2,true)
+		e.anim=newanim(1,1)
+		playanim(e,"anim")
+		add(entities,e)
+	end
+end
+
+function _draw()
+	cls()
+	palt(0,false)
+	palt(30,true)
+	print(#entities)
+	--sortbyy(entities)
+	for e in all(entities) do
+		e.draw()
+	end
+end
+:: utils.lua
+--[[pod_format="raw",created="2026-05-07 01:34:41",modified="2026-05-07 01:34:41",revision=0]]
+--[[ general purpose utilities ]]
+
+--get a map tile flag at pixel coordinate x,y
+function fmget(x,y)
+	return fget(mget(x/8, y/8))
+end
+
+--assumes flag 1 is solid
+function checksolid(x,y,w,h)
+	if (fget(mget(x/8,(y)/8)) == 1 or
+		fget(mget((x+w)/8,y/8)) == 1 or
+		fget(mget(x/8,(y+h)/8)) == 1 or
+		fget(mget((x+w)/8,(y+h)/8)) == 1) then 
+			return true
+	end
+	return false
+end
+
+--checks to see if flag 1 is set for an object that has x,y,w,h defined
+function checksolidobj(a)
+	return checksolid(a.x,a.y,a.w,a.h)
+end
+
+-- checks coordinate overlaps using exclusion
+function overlap(ax,ay,ax1,ay1,bx,by,bx1,by1)
+	if	ax>bx1 or
+		ay>by1 or
+		ax1<bx or
+		ay1<by then
+			return false
+	end
+	return true
+end
+
+-- check object overlaps using exclusion
+function overlapobj(a,b)
+	if (a.x>b.x1 or 
+		a.y>b.y1 or 
+		a.x1<b.x or 
+		a.y1<b.y) then
+			return false
+	end	
+	return true
+end
+
+function wait(t)
+	repeat
+		t-=1
+		flip()
+	until t<0
+end
+
+--sorts a table of objects by their y position on the screen
+function sortbyy(a)
+	for i=1,#a do
+		local j=i
+		while j>1 and a[j-1].y>a[j].y do
+			a[j],a[j-1]=a[j-1],a[j]
+			j=j-1
+		end
+	end
+end
+
+--interpolates a towards b by v
+function lerp(a,b,v)
+	a+=(b-a)*v
+	return a
+end
+
+--the classic
+function fudge(a,pct)
+	pct = pct or 0.3
+	a+=(rnd(1)*pct*2-pct)*a
+	return a
+end
+:: .info.pod
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25",runtime=26,workspaces={{location="main.lua#11",workspace_index=1},{location="entity.lua#29",workspace_index=1},{location="utils.lua",workspace_index=1},{location="anim.lua#70",workspace_index=1},{location="gfx/0.gfx#3",workspace_index=2},{location="map/0.map",workspace_index=3}}]]
+:: gfx/.info.pod
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25"]]
+:: gfx/0.gfx
+b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTAxLTE3IDEwOjM1OjQ4Iixtb2RpZmllZD0iMjAyNi0w
+NS0wNiAwMTo1OTo1NSIscmV2aXNpb249MjBdXWx6NAA3AwAAkTYAAPMhe1swXT17Ym1wPXB4dQBD
+IBAQBPBWBxAHwBfQF8AHEAfwVixmbGFncz0wLHBhbl94CADKeT0wLHpvb209OH0sPgDwF08eEA4g
+jgAUACQAbgAEDxQULQQATgBNDxUtBAA_AAwNDC8fDC0MCwDwEiAPDyAMAE4QBw8RHw8PEQcQTgAB
+AA8fPw8PHyAuAAEPEA4AQh8PDx8MAPAJHgALEQUwBRELDx8ADgAfDwEFCREJBRAfDgAQDyYA-xMf
+FhsaAA4QLiAFOgUAfgAFGgAKBQCOAAUKAA0AfiAMDTA_ywBMJl4AywASIMkAPwABAMsAAGIOAA8f
+DxDOAADMACEfEMwAcgEfDwAeEA7JAMAPHw8PAE4ABToFIF7EABAazAARDdMAXzANDCAuzAAc8B0-
+HhAOMH4AFA8UNABeAAQ9BA0UAE4ADQ8VXRQAPgAcDx8cHQwNDABOMEwAbk8B8DcRBwwPDwwAfgA7
+Dx8AbhAOABsKAAUATgAbAA8WIQkBDxAAPgALCgAPCR8QDwkJAAEAThAPEDkFGwBuADkFCwoAThAZ
+BQAZMgD-Ah0JBQAOABkMAE4ALBAdDAA_ugAeQAAOQH6AAYJEAF4APQQNJLkAM00UDboAPw0MHboA
+BRKeuADwIH4AIQ8WBREAXhAfEBABCQEATgALAA8WABsJEQBOAAoACAAKCxEAbhAYMI4ACAUYMQAR
+HVUADzICPBFMLwLxEIwATgB8AE4ADxAAXCAuAAsRDxY8ChELAB4AIQU6BSHgAgAKACAQGTkBLwBa
+1QJaCaMAICBcpQAHowAAugIBpQAAmgAREAkAALICP1oAGawCOC-w8DEATQ_lBCxvBwsfDwsHpQQD
+EQrXAxUKpQQdD6YEIhoY0QERONEBMRgACNEBHwimBGICygAPpgQOEwqmBBoPpwQlGhinBBE4_wEy
+CAAY_wEfCPsBJg8xAP8SCfMBcHQATgA0TxTtAYsNBB0fFT0ATvUBAAUCRQA_AAH5AQ9fB4APxgAV
+FCDEAA9aB3Yv8PAxAP----------------------------------------------------------
+-2JQbT04fX0=
+:: map/.info.pod
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25"]]
+:: map/0.map
+b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTAxLTE3IDEwOjM1OjQ4Iixtb2RpZmllZD0iMjAyNi0w
+NS0wNiAwMTo0Njo0NiIscmV2aXNpb249Ml1dbHo0AEwAAABQAAAA8Rx7e2JtcD1weHUATIAgIAD-
+AAD---8DLGhpZGRlbj1mYWxzZSxwYW5feD0wCADSeT0wLHRpbGVfaD0xNgoAEHcKAIB6b29tPTF9
+fQ==
+:: sfx/.info.pod
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25"]]
+:: sfx/0.sfx
+b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTA3LTMxIDA4OjMwOjI4Iixtb2RpZmllZD0iMjAyNi0w
+NS0wNiAyMzoyODowOCIscmV2aXNpb249MV1dbHo0AAMBAABWCgAA-zBweHUAAygAAAQABA9AEAIO
+AAGgASACoA4ADxAADfDKAQIDQA8PkAQFBgdADJAICQoLQAyQDwwPDQ8ODEAM8P8BAOvzIaoBEAYP
+MBABD-sQASAB8AACEA8WDzAPDAABD38QAQ-zDy4AAQ_jIA8WD34QD69gAi4A8zaAEAEPDBABD_kg
+D1YPiBAPMGAIIA95IA8xEAIPLg_p8IoPMg--DyywAQ8YkA8tAA8agALwngIAD-gKD-8PgA-3Dw0B
+8Al7ABMgeQD9BQIOEAEgDyEgATAPQPDDDygP--DGMQAfDjAA------_NH-8BAKzPyA9AAA8QQP--
+sPD-AQD-6lD-----KQ==
+:: [eoc]
