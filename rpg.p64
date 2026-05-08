@@ -5,7 +5,7 @@ version 2
 :: map/
 :: sfx/
 :: anim.lua
---[[pod_format="raw",created="2026-05-06 23:17:06",modified="2026-05-07 01:34:39",revision=9]]
+--[[pod_format="raw",created="2026-05-06 23:17:06",modified="2026-05-08 01:54:01",revision=10]]
 --[[ animation functions ]]
 
 local default_global_timing = 10
@@ -47,14 +47,14 @@ end
 local custom = function(state, a)
 	state.time = state.time + 1
 
-	local max = #a.sprites -- or a.maxidx + 1
+	local maxidx = #a.sprites -- or a.maxidx + 1
 	local cur = a.sprites[state.idx]
 	local timing = a.timing
 	if type(cur) == "table" then
 		timing = cur[2]
 		cur = cur[1]
 	end
-	local next = (state.idx + 1 <= max and a.sprites[state.idx+1]) or a.sprites[1]
+	local next = (state.idx + 1 <= maxidx and a.sprites[state.idx+1]) or a.sprites[1]
 	if type(next) == "table" then
 		next = next[1]
 	end
@@ -63,7 +63,7 @@ local custom = function(state, a)
 		state.time = 0
 		state.idx = state.idx + 1
 		cur = next
-		if state.idx > max then
+		if state.idx > maxidx then
 			state.idx = 1
 		end
 	end
@@ -100,7 +100,7 @@ function updatecamoffset(target)
 	camyoffset=target.y-64
 end
 :: entity.lua
---[[pod_format="raw",created="2026-05-07 01:34:40",modified="2026-05-07 01:39:36",revision=1]]
+--[[pod_format="raw",created="2026-05-07 01:34:40",modified="2026-05-08 01:57:14",revision=12]]
 function makeentity(ex,ey,ew,eh,interactable,ecx,ecy,ecw,ech,ecollide)
     local e={
         x=ex,
@@ -112,7 +112,7 @@ function makeentity(ex,ey,ew,eh,interactable,ecx,ecy,ecw,ech,ecollide)
         dx=0,
         dy=0,
         spd=1,
-        flip=false,
+        flp=false,
         dir=0,
         caninteract=interactable,
         --collider
@@ -129,7 +129,7 @@ function makeentity(ex,ey,ew,eh,interactable,ecx,ecy,ecw,ech,ecollide)
     end
 
     function e:draw()
-        spr(updateanim(e),e.x,e.y,1,1,e.flip)
+        spr(updateanim(e),e.x,e.y,e.flp)
     end
 
     function e:drawcollider()
@@ -220,9 +220,9 @@ end
 function makeplayer(x,y)
 	local p=makeentity(x,y,7,7,false,1,5,5,2,true)
 
-	p.walklr=newanim({3,4})
-	p.walkup=newanim({6,5})
-	p.walkdown=newanim({1,2})
+	p.walklr=newanim({3,4},20)
+	p.walkup=newanim({6,5},20)
+	p.walkdown=newanim({1,2},20)
 
 	return p
 end
@@ -254,7 +254,7 @@ function getinput()
 	return -1
 end
 :: main.lua
---[[pod_format="raw",created="2026-05-05 00:06:08",modified="2026-05-07 02:02:25",revision=74]]
+--[[pod_format="raw",created="2026-05-05 00:06:08",modified="2026-05-08 02:00:33",revision=85]]
 include "anim.lua"
 include "camera.lua"
 include "entity.lua"
@@ -264,12 +264,11 @@ include "utils.lua"
 
 entities={}
 
-function init()
-	-- none of these add to the entities table... why?
+
+
+function _init()	
 	player=makeplayer(240,120)
-	add(entities,player)
-	add(entities,1)
-	playanim(player,"walklr")
+	playanim(player,"walkdown")
 end
 
 function _update()
@@ -287,7 +286,7 @@ function _update()
 end
 
 function _draw()
-	cls()
+	cls(28)
 	palt(0,false)
 	palt(30,true)
 	print(#entities)
@@ -374,36 +373,38 @@ function fudge(a,pct)
 	return a
 end
 :: .info.pod
---[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25",runtime=26,workspaces={{location="main.lua#11",workspace_index=1},{location="entity.lua#29",workspace_index=1},{location="utils.lua",workspace_index=1},{location="anim.lua#70",workspace_index=1},{location="gfx/0.gfx#3",workspace_index=2},{location="map/0.map",workspace_index=3}}]]
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-08 02:00:37",runtime=26,workspaces={{location="main.lua#32",workspace_index=1},{location="entity.lua#122",workspace_index=1},{location="utils.lua",workspace_index=1},{location="anim.lua#79",workspace_index=1},{location="gfx/0.gfx#1",workspace_index=2},{location="map/0.map",workspace_index=3}}]]
 :: gfx/.info.pod
---[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25"]]
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-08 02:00:37"]]
 :: gfx/0.gfx
 b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTAxLTE3IDEwOjM1OjQ4Iixtb2RpZmllZD0iMjAyNi0w
-NS0wNiAwMTo1OTo1NSIscmV2aXNpb249MjBdXWx6NAA3AwAAkTYAAPMhe1swXT17Ym1wPXB4dQBD
+NS0wOCAwMjowMDozNyIscmV2aXNpb249MjRdXWx6NACiAwAAgDYAAPMhe1swXT17Ym1wPXB4dQBD
 IBAQBPBWBxAHwBfQF8AHEAfwVixmbGFncz0wLHBhbl94CADKeT0wLHpvb209OH0sPgDwF08eEA4g
-jgAUACQAbgAEDxQULQQATgBNDxUtBAA_AAwNDC8fDC0MCwDwEiAPDyAMAE4QBw8RHw8PEQcQTgAB
-AA8fPw8PHyAuAAEPEA4AQh8PDx8MAPAJHgALEQUwBRELDx8ADgAfDwEFCREJBRAfDgAQDyYA-xMf
-FhsaAA4QLiAFOgUAfgAFGgAKBQCOAAUKAA0AfiAMDTA_ywBMJl4AywASIMkAPwABAMsAAGIOAA8f
-DxDOAADMACEfEMwAcgEfDwAeEA7JAMAPHw8PAE4ABToFIF7EABAazAARDdMAXzANDCAuzAAc8B0-
-HhAOMH4AFA8UNABeAAQ9BA0UAE4ADQ8VXRQAPgAcDx8cHQwNDABOMEwAbk8B8DcRBwwPDwwAfgA7
-Dx8AbhAOABsKAAUATgAbAA8WIQkBDxAAPgALCgAPCR8QDwkJAAEAThAPEDkFGwBuADkFCwoAThAZ
-BQAZMgD-Ah0JBQAOABkMAE4ALBAdDAA_ugAeQAAOQH6AAYJEAF4APQQNJLkAM00UDboAPw0MHboA
-BRKeuADwIH4AIQ8WBREAXhAfEBABCQEATgALAA8WABsJEQBOAAoACAAKCxEAbhAYMI4ACAUYMQAR
-HVUADzICPBFMLwLxEIwATgB8AE4ADxAAXCAuAAsRDxY8ChELAB4AIQU6BSHgAgAKACAQGTkBLwBa
-1QJaCaMAICBcpQAHowAAugIBpQAAmgAREAkAALICP1oAGawCOC-w8DEATQ_lBCxvBwsfDwsHpQQD
-EQrXAxUKpQQdD6YEIhoY0QERONEBMRgACNEBHwimBGICygAPpgQOEwqmBBoPpwQlGhinBBE4_wEy
-CAAY_wEfCPsBJg8xAP8SCfMBcHQATgA0TxTtAYsNBB0fFT0ATvUBAAUCRQA_AAH5AQ9fB4APxgAV
-FCDEAA9aB3Yv8PAxAP----------------------------------------------------------
--2JQbT04fX0=
+jgAUACQAbgAEDxQULQQATgBNDxUtBAA_AAwNDC8fDC0MCwD-WiAPDyAMAF4ABw8RHw8PEQcQXhAP
+Hz8PDx8gPgARAAsfDwsAAQ8QAQAeAAEKAQUwBREKCwAOAAoRBQkRCQUQGwAeAB8PAA8WGhgADhAu
+AA8PCwA4BQBuIBgACAUAjgAFCAANAH4gDA0wPsIAVyJOIMIAIhA_uwDxCw8fHw8PHwARAB4ACw8Q
+EQUwBQEKAQAOABsQxQCwEQoAHhAOAB8WGgjMAHBeAAU4AAsGCABxCAAYIH4ADcsAXzANDCAuxAAc
+8B8-HhAOMH4AFA8UNABeAAQ9BA0UAE4ADQ8VXRQAPgAcDx8cHQwNDABOMEwAbgAPvADwNQwPDwwA
+fgA7Dx8AbhAOABsKAAUATgAbAA8WIQkBDxAAPgALCgAPCR8QDwkJAAEAThAPEDkFGwBuADkFCwoA
+ThAZBQAZMgD-Ah0JBQAOABkMAE4ALBAdDAA_ugAeQAAOQH54AYJEAF4APQQNJLkAM00UDboAPw0M
+HboABRKeuADwIH4AIQ8WBREAXhAfEBABCQEATgALAA8WABsJEQBOAAoACAAKCxEAbhAYMI4ACAUY
+MQARHVUADyoCPBFMJwLxFIwATgB8AE4ADxAAXCAuAAsRDxY8ChELAB4AIQU6BSEPHwAOCgAgEBk5
+ASAAWs8CMCAFOpYAQQUaAArNAh4KzQIPowBAICBcpQAHowBBDgAPH6UAAJoAERAJAACxArBaABkA
+TgAFOgUgXpsAEBqjAD8NAAqsAiQv8PAxAE0P0gMdJk4Q0gNAAAEAB4wEOQcgLtQDA5sEIQoRmgQB
+xQFRHw8BBQ_dBBAfDwAQDycAEx_gBDEgBTjRAQ_eBGsCygA-AAEAzAAAAOwBAqQEIBEKzQAiHxDN
+ADQBHw_mBBAYIwAQD-sBMjgFIKYEAvsBHwj7ASYPMQD-EgnzAXB0AE4ANE8U7QGLDQQdHxU9AE71
+AQAFAkUAPgAB_QEPugIDEQvrARULugINuQIvGxqKBAsPxgBRFCDEAA_0Ag4TC7QCCrMCJRsaswIP
+rgQ2DzEA------------------------------------------------------------YlBtPTh9
+fQ==
 :: map/.info.pod
---[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25"]]
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-08 02:00:37"]]
 :: map/0.map
 b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTAxLTE3IDEwOjM1OjQ4Iixtb2RpZmllZD0iMjAyNi0w
 NS0wNiAwMTo0Njo0NiIscmV2aXNpb249Ml1dbHo0AEwAAABQAAAA8Rx7e2JtcD1weHUATIAgIAD-
 AAD---8DLGhpZGRlbj1mYWxzZSxwYW5feD0wCADSeT0wLHRpbGVfaD0xNgoAEHcKAIB6b29tPTF9
 fQ==
 :: sfx/.info.pod
---[[pod,created="2026-04-16 19:10:37",modified="2026-05-07 02:02:25"]]
+--[[pod,created="2026-04-16 19:10:37",modified="2026-05-08 02:00:37"]]
 :: sfx/0.sfx
 b64$LS1bW3BvZCxjcmVhdGVkPSIyMDI1LTA3LTMxIDA4OjMwOjI4Iixtb2RpZmllZD0iMjAyNi0w
 NS0wNiAyMzoyODowOCIscmV2aXNpb249MV1dbHo0AAMBAABWCgAA-zBweHUAAygAAAQABA9AEAIO
